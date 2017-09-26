@@ -228,6 +228,52 @@ function printLevel() {
 	consolePrint(output,true);
 }
 
+function gameClick(event,click)
+{
+	if ("mouse_action" in state.metadata)
+	{
+		if (titleScreen)
+		{
+			if (mouseCoordY == 7 && titleMode == 1)
+			{
+				titleSelection = 1;
+				checkKey({keyCode: 88},true);
+			}
+			if (mouseCoordY == 5 || (mouseCoordY == 6 && titleMode == 0))
+			{
+				titleSelection = 0;
+				checkKey({keyCode: 88},true);
+			}
+			return;
+		}
+		else if (textMode)
+		{
+			checkKey({keyCode: 88},true);
+			return;
+		}
+
+		if (againing) return;
+
+		var posX = (mouseCoordX + screenOffsetX);
+		var posY = (mouseCoordY + screenOffsetY);
+
+		if (verbose_logging)
+		{
+			consolePrint("Mouse action at coordinates " + posX + "," + posY);
+		}
+
+		var index = posY + posX * level.height;
+	    moveEntitiesAtIndex(index,level.getCell(index),16);
+		if (!throttle_movement || autotickinterval==0)
+		{
+			if (processInput(-1))
+			{
+				redraw();
+			}
+		}
+	}
+}
+
 function levelEditorClick(event,click) {
 	if (mouseCoordY<=-2) {
 		var ypos = editorRowCount-(-mouseCoordY-2)-1;
@@ -336,9 +382,13 @@ function onMouseDown(event) {
         		anyEditsSinceMouseDown=false;
         		return levelEditorClick(event,true);
         	}
+        	else
+        	{
+				return gameClick(event, true);
+			}
         }
         dragging=false;
-        rightdragging=false; 
+        rightdragging=false;
     } else if (event.button===2 || (event.button===0 && (event.ctrlKey||event.metaKey)) ) {
     	if (event.target.id==="gameCanvas") {
 		    dragging=false;
