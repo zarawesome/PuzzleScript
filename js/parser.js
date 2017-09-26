@@ -166,14 +166,14 @@ var codeMirrorFn = function() {
     var reg_equalsrow = /[\=]+/;
     var reg_notcommentstart = /[^\(]+/;
     var reg_csv_separators = /[ \,]*/;
-    var reg_soundverbs = /(move|action|create|destroy|cantmove|undo|restart|titlescreen|startgame|endgame|startlevel|endlevel|showmessage|closemessage|sfx0|sfx1|sfx2|sfx3|sfx4|sfx5|sfx6|sfx7|sfx8|sfx9|sfx10)\s+/;
+    var reg_soundverbs = /(move|action|create|destroy|cantmove|undo|restart|titlescreen|startgame|cancel|endgame|startlevel|endlevel|showmessage|closemessage|sfx0|sfx1|sfx2|sfx3|sfx4|sfx5|sfx6|sfx7|sfx8|sfx9|sfx10)\s+/;
     var reg_directions = /^(action|up|down|left|right|\^|v|\<|\>|forward|moving|stationary|parallel|perpendicular|horizontal|orthogonal|vertical|no|randomdir|random)$/;
     var reg_loopmarker = /^(startloop|endloop)$/;
     var reg_ruledirectionindicators = /^(up|down|left|right|horizontal|vertical|orthogonal|late|rigid)$/;
     var reg_sounddirectionindicators = /\s*(up|down|left|right|horizontal|vertical|orthogonal)\s*/;
     var reg_winconditionquantifiers = /^(all|any|no|some)$/;
-    var reg_keywords = /(objects|collisionlayers|legend|sounds|rules|winconditions|\.\.\.|levels|up|down|left|right|^|v|\>|\<|no|horizontal|orthogonal|vertical|any|all|no|some|moving|stationary|parallel|perpendicular|action)/;
-    var keyword_array = ['objects', 'collisionlayers', 'legend', 'sounds', 'rules', '...','winconditions', 'levels', 'up', 'down', 'left', 'right', 'late','rigid', '^','v','\>','\<','no','randomdir','random', 'horizontal', 'vertical','any', 'all', 'no', 'some', 'moving','stationary','parallel','perpendicular','action'];
+    var reg_keywords = /(checkpoint|objects|collisionlayers|legend|sounds|rules|winconditions|\.\.\.|levels|up|down|left|right|^|\||\[|\]|v|\>|\<|no|horizontal|orthogonal|vertical|any|all|no|some|moving|stationary|parallel|perpendicular|action)/;
+    var keyword_array = ['checkpoint','objects', 'collisionlayers', 'legend', 'sounds', 'rules', '...','winconditions', 'levels','|','[',']','up', 'down', 'left', 'right', 'late','rigid', '^','v','\>','\<','no','randomdir','random', 'horizontal', 'vertical','any', 'all', 'no', 'some', 'moving','stationary','parallel','perpendicular','action','message'];
 
     //  var keywordRegex = new RegExp("\\b(("+cons.join(")|(")+"))$", 'i');
 
@@ -451,6 +451,9 @@ var codeMirrorFn = function() {
                             var match_name = sol ? stream.match(reg_name, true) : stream.match(/[^\s\()]+\s*/,true);
                             if (match_name == null) {
                                 stream.match(reg_notcommentstart, true);
+                                if (stream.pos>0){                                
+                                    logWarning('Unknown junk in object section (possibly: sprites have to be 5 pixels wide and 5 pixels high exactly. Or maybe: the main names for objects have to be words containing only the letters a-z0.9 - if you want to call them something like ",", do it in the legend section).',state.lineNumber);
+                                }
                                 return 'ERROR';
                             } else {
                             	var candname = match_name[0].trim();
@@ -477,7 +480,9 @@ var codeMirrorFn = function() {
 										                                };
 								} else {
 									//set up alias
-									state.legend_synonyms.push([candname,state.objects_candname,state.lineNumber]);
+									var synonym = [candname,state.objects_candname];
+									synonym.lineNumber = state.lineNumber;
+									state.legend_synonyms.push(synonym);
 								}
                                 state.objects_section = 1;
                                 return 'NAME';
@@ -547,20 +552,24 @@ var codeMirrorFn = function() {
                                 var o = state.objects[state.objects_candname];
 
                                 spritematrix[spritematrix.length - 1] += ch;
-
+                                if (spritematrix[spritematrix.length-1].length>5){
+                                    logError('Sprites must be 5 wide and 5 high.', state.lineNumber);
+                                    stream.match(reg_notcommentstart, true);
+                                    return null;
+                                }
+                                o.spritematrix = state.objects_spritematrix;
                                 if (spritematrix.length === 5 && spritematrix[spritematrix.length - 1].length == 5) {
-                                    o.spritematrix = state.objects_spritematrix;
                                     state.objects_section = 0;
                                 }
 
                                 if (ch!=='.') {
                                     var n = parseInt(ch);
                                     if (n>=o.colors.length) {
-                                        logError("trying to access color number "+n+" from the color palette of sprite " +state.objects_candname.toUpperCase()+", but there are only "+o.colors.length+" defined in it.",state.lineNumber);
+                                        logError("Trying to access color number "+n+" from the color palette of sprite " +state.objects_candname.toUpperCase()+", but there are only "+o.colors.length+" defined in it.",state.lineNumber);
                                         return 'ERROR';
                                     }
                                     if (isNaN(n)) {
-                                        logError('invalid character "' + ch + '" in sprite for ' + state.objects_candname.toUpperCase(), state.lineNumber);
+                                        logError('Invalid character "' + ch + '" in sprite for ' + state.objects_candname.toUpperCase(), state.lineNumber);
                                         return 'ERROR';
                                     }
                                     return 'COLOR BOLDCOLOR COLOR-' + o.colors[n].toUpperCase();
@@ -642,7 +651,7 @@ var codeMirrorFn = function() {
                                 for (var i=0;i<state.legend_synonyms.length;i++) {
                                     var a = state.legend_synonyms[i];
                                     if (a[0]===n) {           
-                                        return [a[1]];         
+                                        return substitutor(a[1]);
                                     }
                                 }
 
@@ -679,6 +688,27 @@ var codeMirrorFn = function() {
                                 return 'ERROR';
                             }
                             
+                            var foundOthers=[];
+                            for (var i=0;i<ar.length;i++){
+                                var candname = ar[i];
+                                for (var j=0;j<=state.collisionLayers.length-1;j++){
+                                    var clj = state.collisionLayers[j];
+                                    if (clj.indexOf(candname)>=0){
+                                        if (j!=state.collisionLayers.length-1){
+                                            foundOthers.push(j);
+                                        }
+                                    }
+                                }
+                            }
+                            if (foundOthers.length>0){
+                                var warningStr = 'Object "'+candname.toUpperCase()+'" included in multiple collision layers ( layers ';
+                                for (var i=0;i<foundOthers.length;i++){
+                                    warningStr+=foundOthers[i]+", ";
+                                }
+                                warningStr+=state.collisionLayers.length-1;
+                                logWarning(warningStr +'). You should fix this!',state.lineNumber);                                        
+                            }
+
                             state.collisionLayers[state.collisionLayers.length - 1] = state.collisionLayers[state.collisionLayers.length - 1].concat(ar);
                             if (ar.length>0) {
                             	return 'NAME';                            
@@ -709,11 +739,13 @@ var codeMirrorFn = function() {
 	                            }
                                 if (splits.indexOf(candname, 2)>=2) {
                                     logError("You can't define object " + candname.toUpperCase() + " in terms of itself!", state.lineNumber);
+                                    ok = false;
                                 }
                                 checkNameNew(state,candname);
                         	}
 
-                            if (splits.length < 3) {
+                            if (!ok) {
+                            } else if (splits.length < 3) {
                                 ok = false;
                             } else if (splits[1] !== '=') {
                                 ok = false;
@@ -722,7 +754,9 @@ var codeMirrorFn = function() {
                                 stream.match(reg_notcommentstart, true);
                                 return 'ERROR';
                             } */ else if (splits.length === 3) {
-                                state.legend_synonyms.push([splits[0], splits[2].toLowerCase(),state.lineNumber]);
+                                var synonym = [splits[0], splits[2].toLowerCase()];
+                                synonym.lineNumber = state.lineNumber;
+                                state.legend_synonyms.push(synonym);
                             } else if (splits.length % 2 === 0) {
                                 ok = false;
                             } else {
@@ -737,7 +771,7 @@ var codeMirrorFn = function() {
 	                                	for (var i=0;i<state.legend_synonyms.length;i++) {
 	                                		var a = state.legend_synonyms[i];
 	                                		if (a[0]===n) {   
-	                                			return [1];        
+	                                			return substitutor(a[1]);
 	                                		}
 	                                	}
 	                                	for (var i=0;i<state.legend_aggregates.length;i++) {
@@ -782,7 +816,7 @@ var codeMirrorFn = function() {
 	                                	for (var i=0;i<state.legend_synonyms.length;i++) {
 	                                		var a = state.legend_synonyms[i];
 	                                		if (a[0]===n) {   
-	                                			return [1];        
+	                                			return substitutor(a[1]);
 	                                		}
 	                                	}
 	                                	for (var i=0;i<state.legend_aggregates.length;i++) {
@@ -808,7 +842,7 @@ var codeMirrorFn = function() {
                                         }
                                     }
                                     if (ok) {
-                                        var newlegend = [splits[0], splits[2].toLowerCase(), splits[4].toLowerCase()];
+                                        var newlegend = [splits[0]].concat(substitutor(splits[2])).concat(substitutor(splits[4]));
                                         for (var i = 6; i < splits.length; i += 2) {
                                             newlegend.push(splits[i].toLowerCase());
                                         }
@@ -928,7 +962,7 @@ var codeMirrorFn = function() {
                             } else {
                                 if (state.names.indexOf(m) >= 0) {
                                     if (sol) {
-                                        logError('Identifiers cannot appear outside of square brackes in rules, only directions can.', state.lineNumber);
+                                        logError('Identifiers cannot appear outside of square brackets in rules, only directions can.', state.lineNumber);
                                         return 'ERROR';
                                     } else {
                                         stream.match(/\s*/, true);
@@ -1006,7 +1040,7 @@ var codeMirrorFn = function() {
                         {
                             if (stream.match(/\s*message\s*/, true)) {
                                 state.tokenIndex = 1;//1/2 = message/level
-                                var newdat = ['\n', mixedCase.slice(stream.pos).trim()];
+                                var newdat = ['\n', mixedCase.slice(stream.pos).trim(),state.lineNumber];
                                 if (state.levels[state.levels.length - 1].length == 0) {
                                     state.levels.splice(state.levels.length - 1, 0, newdat);
                                 } else {
@@ -1020,26 +1054,20 @@ var codeMirrorFn = function() {
                                 if (lastlevel[0] == '\n') {
                                     state.levels.push([state.lineNumber,line]);
                                 } else {
-/*                                    if (lastlevel.length>0) 
-                                    {
-                                        if (line.length!=lastlevel[1].length) {
-//                                            logError("Within a single level, the width of each row must be the same.",state.lineNumber);
-                                        }
-                                    }*/
                                     if (lastlevel.length==0)
                                     {
                                         lastlevel.push(state.lineNumber);
                                     }
-                                    lastlevel.push(line);                                
-                                }
-                                /*
-                                if (lastlevel.length>1) {
-                                    if (lastlevel[lastlevel.length-2].length!=line.length) {
-                                        stream.match(reg_notcommentstart,true);
-                                        logError("All line lengths in a level have to be the same",state.lineNumber);
-                                        return "ERROR";
+                                    lastlevel.push(line);  
+
+                                    if (lastlevel.length>1) 
+                                    {
+                                        if (line.length!=lastlevel[1].length) {
+                                            logWarning("Maps must be rectangular, yo (In a level, the length of each row must be the same).",state.lineNumber);
+                                        }
                                     }
-                                }*/
+                                }
+                                
                             }
                         } else {
                             if (state.tokenIndex == 1) {

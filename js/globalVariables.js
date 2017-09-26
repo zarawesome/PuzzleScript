@@ -1,15 +1,32 @@
 var unitTesting=false;
 var curlevel=0;
+var curlevelTarget=null;
+var hasUsedCheckpoint=false;
 var levelEditorOpened=false;
 
-try {
- 	if (!!window.localStorage) { 
-		if (localStorage[document.URL]!==undefined) {
-			curlevel = localStorage[document.URL];
-		}
-	}		 
-} catch(ex) {
+function doSetupTitleScreenLevelContinue(){
+    try {
+     	if (!!window.localStorage) { 
+    		if (localStorage[document.URL]!==undefined) {
+                if (localStorage[document.URL+'_checkpoint']!==undefined){
+                    var backupStr = localStorage[document.URL+'_checkpoint'];
+                    curlevelTarget = JSON.parse(backupStr);
+                    
+                    var arr = [];
+                    for(var p in Object.keys(curlevelTarget.dat)) {
+                        arr[p] = curlevelTarget.dat[p];
+                    }
+                    curlevelTarget.dat = new Int32Array(arr);
+
+                }
+    	        curlevel = localStorage[document.URL];            
+    		}
+    	}		 
+    } catch(ex) {
+    }
 }
+
+doSetupTitleScreenLevelContinue();
 
 
 var verbose_logging=false;
@@ -29,6 +46,7 @@ var norepeat_action=false;
 var oldflickscreendat=[];//used for buffering old flickscreen/scrollscreen positions, in case player vanishes
 var keybuffer = [];
 
+var restarting=false;
 
 var messageselected=false;
 

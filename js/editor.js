@@ -41,7 +41,9 @@ editor.on('mousedown', function(cm, event) {
     playSound(seed);
   } else if (event.target.className == 'cm-LEVEL') {
     if (event.ctrlKey||event.metaKey) {
-      compile(["levelline",cm.posFromMouse(event).line]);      
+      document.activeElement.blur();  // unfocus code panel
+      event.preventDefault();         // prevent refocus
+      compile(["levelline",cm.posFromMouse(event).line]);
     }
   }
 });
@@ -132,6 +134,7 @@ function tryLoadGist(id) {
 		} else {
 			var code=result["files"]["script.txt"]["content"];
 			editor.setValue(code);
+			editor.clearHistory();
 			setEditorClean();
 			unloadGame();
 			compile(["restart"],code);

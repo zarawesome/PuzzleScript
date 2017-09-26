@@ -156,8 +156,8 @@ function unloadGame() {
 
 function generateTitleScreen()
 {
-	titleMode=curlevel>0?1:0;
-	
+	titleMode=(curlevel>0||curlevelTarget!==null)?1:0;
+
 	if (state.levels.length===0) {
 		titleImage=intro_template;
 		return;
@@ -201,7 +201,7 @@ function generateTitleScreen()
 		titleImage[11]=".Z to undo.....................";
 	}
 	if (noAction) {
-		titleImage[10]="..................................";
+		titleImage[10]=".X to select......................";
 	}
 	for (var i=0;i<titleImage.length;i++)
 	{
@@ -222,9 +222,12 @@ function generateTitleScreen()
 		var attribution="by "+state.metadata.author;
 		var attributionsplit = wordwrap(attribution,titleImage[0].length);
 		for (var i=0;i<attributionsplit.length;i++) {
-			var line = attributionsplit[i];
+			var line = attributionsplit[i]+" ";
+			if (line.length>width){
+				line=line.slice(0,width);
+			}
 			var row = titleImage[3+i];
-			titleImage[3+i]=row.slice(0,width-line.length-1)+line+row[row.length-1];			
+			titleImage[3+i]=row.slice(0,width-line.length)+line;
 		}
 	}
 
@@ -318,6 +321,11 @@ function drawMessageScreen() {
 		titleImage[i]=titleImage[i].replace(/\./g, ' ');
 	}
 
+	var emptyLineStr = titleImage[9];
+	var xToContinueStr = titleImage[10];
+
+	titleImage[10]=emptyLineStr;
+
 	var width = titleImage[0].length;
 
 	var message;
@@ -327,11 +335,19 @@ function drawMessageScreen() {
 	} else {
 		message = messagetext;
 	}
+	
 	splitMessage = wordwrap(message,titleImage[0].length);
 
-	for (var i=0;i<splitMessage.length;i++) {
+
+	var offset = 5-((splitMessage.length/2)|0);
+	if (offset<0){
+		offset=0;
+	}
+
+	var count = Math.min(splitMessage.length,12);
+	for (var i=0;i<count;i++) {
 		var m = splitMessage[i];
-		var row = 5-((splitMessage.length/2)|0)+i;
+		var row = offset+i;	
 		var messageLength=m.length;
 		var lmargin = ((width-messageLength)/2)|0;
 		var rmargin = width-messageLength-lmargin;
@@ -339,9 +355,20 @@ function drawMessageScreen() {
 		titleImage[row]=rowtext.slice(0,lmargin)+m+rowtext.slice(lmargin+m.length);		
 	}
 
+	var endPos = 10;
+	if (count>=10) {
+		if (count<12){
+			endPos = count + 1;
+		} else {
+			endPos = 12;
+		}
+        }
 	if (quittingMessageScreen) {
-		titleImage[10]=titleImage[9];
-	}		
+		titleImage[endPos]=emptyLineStr;
+	} else {
+		titleImage[endPos]=xToContinueStr;
+	}
+	
 	canvasResize();
 }
 
@@ -355,12 +382,13 @@ function loadLevelFromLevelDat(state,leveldat,randomseed) {
 	RandomGen = new RNG(loadedLevelSeed);
 	forceRegenImages=true;
 	titleScreen=false;
-	titleMode=curlevel>0?1:0;
-	titleSelection=curlevel>0?1:0;
+	titleMode=(curlevel>0||curlevelTarget!==null)?1:0;
+	titleSelection=(curlevel>0||curlevelTarget!==null)?1:0;
 	titleSelected=false;
     againing=false;
     if (leveldat===undefined) {
     	consolePrint("Trying to access a level that doesn't exist.",true);
+	goToTitleScreen();
     	return;
     }
     if (leveldat.message===undefined) {
@@ -369,8 +397,28 @@ function loadLevelFromLevelDat(state,leveldat,randomseed) {
 		level = leveldat.clone();
 		RebuildLevelArrays();
 
+
+        if (state!==undefined) {
+	        if (state.metadata.flickscreen!==undefined){
+	            oldflickscreendat=[
+	            	0,
+	            	0,
+	            	Math.min(state.metadata.flickscreen[0],level.width),
+	            	Math.min(state.metadata.flickscreen[1],level.height)
+	            ];
+	        } else if (state.metadata.zoomscreen!==undefined){
+	            oldflickscreendat=[
+	            	0,
+	            	0,
+	            	Math.min(state.metadata.zoomscreen[0],level.width),
+	            	Math.min(state.metadata.zoomscreen[1],level.height)
+	            ];
+	        }
+        }
+
 	    backups=[]
 	    restartTarget=backupLevel();
+		keybuffer=[];
 
 	    if ('run_rules_on_level_start' in state.metadata) {
 			processInput(-1,true);
@@ -381,15 +429,30 @@ function loadLevelFromLevelDat(state,leveldat,randomseed) {
     	canvasResize();
 	}
 
-	if (canDump===true) {
-		inputHistory=[];
-	}
+	clearInputHistory();
+}
+
+function loadLevelFromStateTarget(state,levelindex,target,randomseed) {	
+    var leveldat = target;    
+	curlevel=levelindex;
+	curlevelTarget=target;
+    if (leveldat.message===undefined) {
+	    if (levelindex=== 0){ 
+			tryPlayStartLevelSound();
+		} else {
+			tryPlayStartLevelSound();			
+		}
+    }
+    loadLevelFromLevelDat(state,state.levels[levelindex],randomseed);
+    restoreLevel(target);
+    restartTarget=target;
 }
 
 function loadLevelFromState(state,levelindex,randomseed) {	
     var leveldat = state.levels[levelindex];    
 	curlevel=levelindex;
-    if (leveldat.message===undefined) {
+	curlevelTarget=null;
+    if (leveldat!==undefined && leveldat.message===undefined) {
 	    if (levelindex=== 0){ 
 			tryPlayStartLevelSound();
 		} else {
@@ -424,6 +487,10 @@ var sprites = [
 
 
 generateTitleScreen();
+if (titleMode>0){
+	titleSelection=1;
+}
+
 canvasResize();
 
 function tryPlaySimpleSound(soundname) {
@@ -442,6 +509,10 @@ function tryPlayStartGameSound() {
 
 function tryPlayEndGameSound() {
 	tryPlaySimpleSound("endgame");
+}
+
+function tryPlayCancelSound() {
+	tryPlaySimpleSound("cancel");
 }
 
 function tryPlayStartLevelSound() {
@@ -475,7 +546,18 @@ function backupLevel() {
 	var ret = {
 		dat : new Int32Array(level.objects),
 		width : level.width,
-		height : level.height
+		height : level.height,
+		oldflickscreendat: oldflickscreendat.concat([])
+	};
+	return ret;
+}
+
+function level4Serialization() {
+	var ret = {
+		dat : Array.from(level.objects),
+		width : level.width,
+		height : level.height,
+		oldflickscreendat: oldflickscreendat.concat([])
 	};
 	return ret;
 }
@@ -490,10 +572,13 @@ function setGameState(_state, command, randomseed) {
     STRIDE_MOV=_state.STRIDE_MOV;
     STRIDE_OBJ=_state.STRIDE_OBJ;
     
+    sfxCreateMask=new BitVec(STRIDE_OBJ);
+    sfxDestroyMask=new BitVec(STRIDE_OBJ);
+
 	if (command===undefined) {
 		command=["restart"];
 	}
-	if (state.levels.length===0 && command.length>0 && command[0]==="rebuild")  {
+	if ((state.levels.length===0 || _state.levels.length===0) && command.length>0 && command[0]==="rebuild")  {
 		command=["restart"];
 	}
 	if (randomseed===undefined) {
@@ -502,8 +587,11 @@ function setGameState(_state, command, randomseed) {
 	RandomGen = new RNG(randomseed);
 
 	state = _state;
+
     window.console.log('setting game state :D ');
-    backups=[];
+    if (command[0]!=="rebuild"){
+    	backups=[];
+    }
     //set sprites
     sprites = [];
     for (var n in state.objects) {
@@ -543,18 +631,22 @@ function setGameState(_state, command, randomseed) {
     switch(command[0]){
     	case "restart":
     	{
+    		if (restarting==true){
+    			logWarning('A "restart" command is being triggered in the "run_rules_on_level_start" section of level creation, which would cause an infinite loop if it was actually triggered, but it\'s being ignored, so it\'s not.');
+    			break;
+    		}
 		    winning=false;
 		    timer=0;
 		    titleScreen=true;
 		    tryPlayTitleSound();
 		    textMode=true;
-		    titleSelection=curlevel>0?1:0;
+		    titleSelection=(curlevel>0||curlevelTarget!==null)?1:0;
 		    titleSelected=false;
 		    quittingMessageScreen=false;
 		    quittingTitleScreen=false;
 		    messageselected=false;
 		    titleMode = 0;
-		    if (curlevel>0) {
+		    if ((curlevel>0||curlevelTarget!==null)) {
 		    	titleMode=1;
 		    }
 		    generateTitleScreen();
@@ -573,7 +665,7 @@ function setGameState(_state, command, randomseed) {
 		    timer=0;
 		    titleScreen=false;
 		    textMode=false;
-		    titleSelection=curlevel>0?1:0;
+		    titleSelection=(curlevel>0||curlevelTarget!==null)?1:0;
 		    titleSelected=false;
 		    quittingMessageScreen=false;
 		    quittingTitleScreen=false;
@@ -593,7 +685,7 @@ function setGameState(_state, command, randomseed) {
 				    timer=0;
 				    titleScreen=false;
 				    textMode=false;
-				    titleSelection=curlevel>0?1:0;
+				    titleSelection=(curlevel>0||curlevelTarget!==null)?1:0;
 				    titleSelected=false;
 				    quittingMessageScreen=false;
 				    quittingTitleScreen=false;
@@ -607,17 +699,17 @@ function setGameState(_state, command, randomseed) {
 		}
 	}
 	
-	if (canDump===true) {
-		inputHistory=[];
+	if(command[0] !== "rebuild") {
+		clearInputHistory();
 	}
-    canvasResize();
+	canvasResize();
 
 
 
 	if (canYoutube) {
 		if ('youtube' in state.metadata) {
 			var youtubeid=state.metadata['youtube'];
-			var url = "https://youtube.googleapis.com/v/"+youtubeid+"?autoplay=1&loop=1&playlist="+youtubeid;
+			var url = "https://www.youtube.com/embed/"+youtubeid+"?autoplay=1&loop=1&playlist="+youtubeid;
 			ifrm = document.createElement("IFRAME");
 			ifrm.setAttribute("src",url);
 			ifrm.style.visibility="hidden";
@@ -671,7 +763,7 @@ function RebuildLevelArrays() {
 	level.rowCellContents = [];
 	level.colCellContents = [];
 	level.mapCellContents = new BitVec(STRIDE_OBJ);
-	_movementsVec = new BitVec(STRIDE_MOV);
+	_movementVecs = [new BitVec(STRIDE_MOV),new BitVec(STRIDE_MOV),new BitVec(STRIDE_MOV)];
 
 	_o1 = new BitVec(STRIDE_OBJ);
 	_o2 = new BitVec(STRIDE_OBJ);
@@ -707,9 +799,10 @@ function RebuildLevelArrays() {
 
 var messagetext="";
 function restoreLevel(lev) {
-	oldflickscreendat=[];
+	oldflickscreendat=lev.oldflickscreendat.concat([]);
 
 	level.objects = new Int32Array(lev.dat);
+
 	if (level.width !== lev.width || level.height !== lev.height) {
 		level.width = lev.width;
 		level.height = lev.height;
@@ -738,7 +831,6 @@ function restoreLevel(lev) {
 	}
 
     againing=false;
-    messagetext="";
     level.commandQueue=[];
 }
 
@@ -747,9 +839,11 @@ var flickscreen=false;
 var screenwidth=0;
 var screenheight=0;
 
-
 function DoRestart(force) {
-
+	if (restarting===true){
+		return;
+	}
+	restarting=true;
 	if (force!==true && ('norestart' in state.metadata)) {
 		return;
 	}
@@ -769,18 +863,39 @@ function DoRestart(force) {
 	}
 	
 	level.commandQueue=[];
+	restarting=false;
 }
 
-function DoUndo(force) {
+function backupDiffers(){
+	if (backups.length==0){
+		return true;
+	}
+	var bak = backups[backups.length-1];
+	for (var i=0;i<level.objects.length;i++) {
+    	if (level.objects[i]!==bak.dat[i]) {
+    		return true;
+    	}
+    }
+    return false;
+}
+
+function DoUndo(force,ignoreDuplicates) {
 	if ((!levelEditorOpened)&&('noundo' in state.metadata && force!==true)) {
 		return;
 	}
 	if (verbose_logging) {
 		consolePrint("--- undoing ---",true);
 	}
+
+	if (ignoreDuplicates){
+		while (backupDiffers()==false){
+			backups.pop();
+		}
+	}
+
 	if (backups.length>0) {
-		var tobackup = backups[backups.length-1];
-		restoreLevel(tobackup);
+		var torestore = backups[backups.length-1];
+		restoreLevel(torestore);
 		backups = backups.splice(0,backups.length-1);
 		if (! force) {
 			tryPlayUndoSound();
@@ -873,7 +988,7 @@ function repositionEntitiesOnLayer(positionIndex,layer,dirMask)
     	return false;
     }
 
-    var targetIndex = (positionIndex+delta[1]+delta[0]*level.height)%level.n_tiles;
+    var targetIndex = (positionIndex+delta[1]+delta[0]*level.height);
 
     var layerMask = state.layerMasks[layer];
     var targetMask = level.getCellInto(targetIndex,_o7);
@@ -907,7 +1022,7 @@ function repositionEntitiesOnLayer(positionIndex,layer,dirMask)
 	var rowIndex=(targetIndex%level.height);
     level.colCellContents[colIndex].ior(movingEntities);
     level.rowCellContents[rowIndex].ior(movingEntities);
-    level.mapCellContents.ior(layerMask);
+    level.mapCellContents.ior(movingEntities);
     return true;
 }
 
@@ -967,9 +1082,12 @@ Level.prototype.setCell = function(index, vec) {
 	}
 }
 
-var _movementsVec;
-
+var _movementVecs;
+var _movementVecIndex=0;
 Level.prototype.getMovements = function(index) {
+	var _movementsVec=_movementVecs[_movementVecIndex];
+	_movementVecIndex=(_movementVecIndex+1)%_movementVecs.length;
+
 	for (var i=0;i<STRIDE_MOV;i++) {
 		_movementsVec.data[i]=this.movements[index*STRIDE_MOV+i];	
 	}
@@ -1043,7 +1161,7 @@ BitVec.prototype.ishiftor = function(mask, shift) {
 	var low = mask << toshift;
 	this.data[shift>>5] |= low;
 	if (toshift) {
-		high = mask >> (32 - toshift);
+		var high = mask >> (32 - toshift);
 		this.data[(shift>>5)+1] |= high;
 	}
 }
@@ -1145,7 +1263,7 @@ Rule.prototype.generateCellRowMatchesFunction = function(cellRow,hasEllipsis)  {
 		}
 		fn += "return "+cellRow[0].generateMatchString('0_');// cellRow[0].matches(i)";
 		for (var cellIndex=1;cellIndex<cr_l;cellIndex++) {
-			fn+="&&cellRow["+cellIndex+"].matches((i+"+cellIndex+"*d)%level.n_tiles)";
+			fn+="&&cellRow["+cellIndex+"].matches((i+"+cellIndex+"*d))";
 		}
 		fn+=";";
 
@@ -1166,15 +1284,15 @@ Rule.prototype.generateCellRowMatchesFunction = function(cellRow,hasEllipsis)  {
 		fn += "if(cellRow[0].matches(i)";
 		var cellIndex=1;
 		for (;cellRow[cellIndex]!==ellipsisPattern;cellIndex++) {
-			fn+="&&cellRow["+cellIndex+"].matches((i+"+cellIndex+"*d)%level.n_tiles)";
+			fn+="&&cellRow["+cellIndex+"].matches((i+"+cellIndex+"*d))";
 		}
 		cellIndex++;
 		fn+=") {\n";
 		fn+="\tfor (var k=kmin;k<kmax;k++) {\n"
-		fn+="\t\tif(cellRow["+cellIndex+"].matches((i+d*(k+"+(cellIndex-1)+"))%level.n_tiles)";
+		fn+="\t\tif(cellRow["+cellIndex+"].matches((i+d*(k+"+(cellIndex-1)+")))";
 		cellIndex++;
 		for (;cellIndex<cr_l;cellIndex++) {
-			fn+="&&cellRow["+cellIndex+"].matches((i+d*(k+"+(cellIndex-1)+"))%level.n_tiles)";			
+			fn+="&&cellRow["+cellIndex+"].matches((i+d*(k+"+(cellIndex-1)+")))";			
 		}
 		fn+="){\n";
 		fn+="\t\t\tresult.push([i,k]);\n";
@@ -1198,7 +1316,7 @@ function cellRowMatchesWildcardFunctionGenerate(direction,cellRow,i, maxk, mink)
 	var matchfirsthalf = cellRow[0].matches(i);
 	if (matchfirsthalf) {
 		for (var k=mink;k<maxk;k++) {
-			if (cellRow[2].matches((i+d*(k+0))%level.n_tiles)) {
+			if (cellRow[2].matches((i+d*(k+0)))) {
 				result.push([i,k]);
 			}
 		}
@@ -1382,7 +1500,7 @@ CellPattern.prototype.replace = function(rule, currentIndex) {
 		curRigidGroupIndexMask = level.rigidGroupIndexMask[currentIndex] || new BitVec(STRIDE_MOV);
 		curRigidMovementAppliedMask = level.rigidMovementAppliedMask[currentIndex] || new BitVec(STRIDE_MOV);
 
-		if (!rigidMask.bitsSetInArray(curRigidGroupIndexMask.data) || 
+		if (!rigidMask.bitsSetInArray(curRigidGroupIndexMask.data) &&
 			!replace.movementsLayerMask.bitsSetInArray(curRigidMovementAppliedMask.data) ) {
 			curRigidGroupIndexMask.ior(rigidMask);
 			curRigidMovementAppliedMask.ior(replace.movementsLayerMask);
@@ -1455,7 +1573,7 @@ function DoesCellRowMatchWildCard(direction,cellRow,i,maxk,mink) {
         var targetIndex = i;
 
         for (var j=1;j<cellRow.length;j+=1) {
-            targetIndex = (targetIndex+d1+d0)%level.n_tiles;
+            targetIndex = (targetIndex+d1+d0);
 
             var cellPattern = cellRow[j]
             if (cellPattern === ellipsisPattern) {
@@ -1468,7 +1586,7 @@ function DoesCellRowMatchWildCard(direction,cellRow,i,maxk,mink) {
 					    if (!cellPattern.matches(targetIndex2)) {
 					    	break;
 					    }
-                        targetIndex2 = (targetIndex2+d1+d0)%level.n_tiles;
+                        targetIndex2 = (targetIndex2+d1+d0);
             		}
 
 		            if (j2>=cellRow.length) {
@@ -1506,11 +1624,11 @@ function DoesCellRowMatch(direction,cellRow,i,k) {
 
         var targetIndex = i;
         for (var j=1;j<cr_l;j++) {
-            targetIndex = (targetIndex+d1+d0)%level.n_tiles;
+            targetIndex = (targetIndex+d1+d0);
             cellPattern = cellRow[j];
 			if (cellPattern === ellipsisPattern) {
 					//only for once off verifications
-            	targetIndex = (targetIndex+(d1+d0)*k)%level.n_tiles; 					
+            	targetIndex = (targetIndex+(d1+d0)*k); 					
             }
 		    if (!cellPattern.matches(targetIndex)) {
                 break;
@@ -1718,20 +1836,24 @@ function commitPreservationState(ruleGroupIndex) {
 		movements:new Int32Array(level.movements),
 		rigidGroupIndexMask:level.rigidGroupIndexMask.concat([]),
 		rigidMovementAppliedMask:level.rigidMovementAppliedMask.concat([]),
-		bannedGroup:level.bannedGroup.concat([])
+		bannedGroup:level.bannedGroup.concat([]),
+		commandQueue:level.commandQueue.concat([])
 	};
 	rigidBackups[ruleGroupIndex]=propagationState;
 	return propagationState;
 }
 
-function restorePreservationState(preservationState) {
+function restorePreservationState(preservationState) {;
 //don't need to concat or anythign here, once something is restored it won't be used again.
 	level.objects = new Int32Array(preservationState.objects);
 	level.movements = new Int32Array(preservationState.movements);
 	level.rigidGroupIndexMask = preservationState.rigidGroupIndexMask.concat([]);
     level.rigidMovementAppliedMask = preservationState.rigidMovementAppliedMask.concat([]);
-    sfxCreateMask=new BitVec(STRIDE_OBJ);
-    sfxDestroyMask=new BitVec(STRIDE_OBJ);
+    level.commandQueue = preservationState.commandQueue.concat([]);
+    sfxCreateMask.setZero();
+    sfxDestroyMask.setZero();
+	consolePrint("Rigid movement application failed, rolling back");
+
 //	rigidBackups = preservationState.rigidBackups;
 }
 
@@ -1754,6 +1876,24 @@ Rule.prototype.findMatches = function() {
     }
     return matches;
 };
+
+Rule.prototype.directional = function(){
+	//Check if other rules in its rulegroup with the same line number.
+	for (var i=0;i<state.rules.length;i++){
+		var rg = state.rules[i];
+		var copyCount=0;
+		for (var j=0;j<rg.length;j++){
+			if (this.lineNumber===rg[j].lineNumber){
+				copyCount++;
+			}
+			if (copyCount>1){
+				return true;
+			}
+		}
+	}
+
+    return false;
+}
 
 Rule.prototype.applyAt = function(delta,tuple,check) {
 	var rule = this;
@@ -1793,18 +1933,22 @@ Rule.prototype.applyAt = function(delta,tuple,check) {
 
             if (preCell === ellipsisPattern) {
             	var k = tuple[cellRowIndex][1];
-            	currentIndex = (currentIndex+(d1+d0)*k)%level.n_tiles;
+            	currentIndex = (currentIndex+(d1+d0)*k);
             	continue;
             }
 
             result = preCell.replace(rule, currentIndex) || result;
 
-            currentIndex = (currentIndex+d1+d0)%level.n_tiles;
+            currentIndex = (currentIndex+d1+d0);
         }
     }
 
 	if (verbose_logging && result){
 		var ruleDirection = dirMaskName[rule.direction];
+		if (!rule.directional()){
+			ruleDirection="";
+		}
+
 		var logString = '<font color="green">Rule <a onclick="jumpToLine(' + rule.lineNumber + ');"  href="javascript:void(0);">' + rule.lineNumber + '</a> ' + 
 			ruleDirection + ' applied.</font>';
 		consolePrint(logString);
@@ -1935,7 +2079,7 @@ function applyRuleGroup(ruleGroup) {
     return loopPropagated;
 }
 
-function applyRules(rules, loopPoint, startRuleGroupindex){
+function applyRules(rules, loopPoint, startRuleGroupindex, bannedGroup){
     //for each rule
     //try to match it
 
@@ -1943,7 +2087,7 @@ function applyRules(rules, loopPoint, startRuleGroupindex){
     var loopPropagated = startRuleGroupindex>0;
     var loopCount = 0;
     for (var ruleGroupIndex=startRuleGroupindex;ruleGroupIndex<rules.length;) {
-    	if (level.bannedGroup[ruleGroupIndex]) {
+    	if (bannedGroup && bannedGroup[ruleGroupIndex]) {
     		//do nothing
     	} else {
     		var ruleGroup=rules[ruleGroupIndex];
@@ -2034,8 +2178,8 @@ function resolveMovements(dir){
     return doUndo;
 }
 
-var sfxCreateMask=0;
-var sfxDestroyMask=0;
+var sfxCreateMask=null;
+var sfxDestroyMask=null;
 
 function calculateRowColMasks() {
 	for(var i=0;i<level.mapCellContents.length;i++) {
@@ -2112,32 +2256,29 @@ function processInput(dir,dontCheckWin,dontModify) {
 		}
 
         var i=0;
-        var first=true;
         level.bannedGroup = [];
         rigidBackups = [];
         level.commandQueue=[];
         var startRuleGroupIndex=0;
         var rigidloop=false;
         var startState = commitPreservationState();
-	    messagetext="";
-	    sfxCreateMask=new BitVec(STRIDE_OBJ);
-	    sfxDestroyMask=new BitVec(STRIDE_OBJ);
+	    sfxCreateMask.setZero();
+	    sfxDestroyMask.setZero();
 
 		seedsToPlay_CanMove=[];
 		seedsToPlay_CantMove=[];
 
 		calculateRowColMasks();
 
-        while (first || rigidloop/*||(anyMovements()&& (i<50))*/) {
+        do {
         //not particularly elegant, but it'll do for now - should copy the world state and check
         //after each iteration
-        	first=false;
         	rigidloop=false;
         	i++;
         	
         	if (verbose_logging){consolePrint('applying rules');}
 
-        	applyRules(state.rules, state.loopPoint, startRuleGroupIndex);	
+        	applyRules(state.rules, state.loopPoint, startRuleGroupIndex, level.bannedGroup);
         	var shouldUndo = resolveMovements();
 
         	if (shouldUndo) {
@@ -2149,10 +2290,10 @@ function processInput(dir,dontCheckWin,dontModify) {
         		applyRules(state.lateRules, state.lateLoopPoint, 0);
         		startRuleGroupIndex=0;
         	}
-        }
+        } while (i < 50 && rigidloop);
 
         if (i>=50) {
-        	window.console.log("looped through 50 times, gave up.  too many loops!");
+            consolePrint("looped through 50 times, gave up.  too many loops!");
         }
 
 
@@ -2172,7 +2313,7 @@ function processInput(dir,dontCheckWin,dontModify) {
 	    			consoleCacheDump();
         		}
         		backups.push(bak);
-        		DoUndo(true);
+        		DoUndo(true,false);
         		return false;
         	}
         	//play player cantmove sounds here
@@ -2180,11 +2321,13 @@ function processInput(dir,dontCheckWin,dontModify) {
 
 	    if (level.commandQueue.indexOf('cancel')>=0) {	
 	    	if (verbose_logging) { 
-	    		consolePrint('CANCEL command executed, cancelling turn.');
 	    		consoleCacheDump();
+	    		consolePrint('CANCEL command executed, cancelling turn.',true);
 			}
     		backups.push(bak);
-    		DoUndo(true);
+			messagetext = "";
+    		DoUndo(true,false);
+    		tryPlayCancelSound();
     		return false;
 	    } 
 
@@ -2194,6 +2337,7 @@ function processInput(dir,dontCheckWin,dontModify) {
 	    		consoleCacheDump();
 			}
     		backups.push(bak);
+			messagetext = "";
 	    	DoRestart(true);
     		return true;
 	    } 
@@ -2210,7 +2354,7 @@ function processInput(dir,dontCheckWin,dontModify) {
 	        			consoleCacheDump();
 	        		}
 	        		backups.push(bak);
-	        		DoUndo(true);
+	        		DoUndo(true,false);
 					return true;
 				} else {
 					if (dir!==-1) {
@@ -2260,6 +2404,8 @@ function processInput(dir,dontCheckWin,dontModify) {
 				if (command==='message') {
 					showTempMessage();
 				}
+			} else {
+				messagetext = "";
 			}
 	    }
 
@@ -2275,13 +2421,17 @@ function processInput(dir,dontCheckWin,dontModify) {
 		    	if (verbose_logging) { 
 		    		consolePrint('CHECKPOINT command executed, saving current state to the restart state.');
 				}
-				restartTarget=backupLevel();
+				restartTarget=level4Serialization();
+				hasUsedCheckpoint=true;
+				var backupStr = JSON.stringify(restartTarget);
+				localStorage[document.URL+'_checkpoint']=backupStr;
+				localStorage[document.URL]=curlevel;
 			}	 
 
 		    if (level.commandQueue.indexOf('again')>=0 && modified) {
 		    	//first have to verify that something's changed
-		    	var oldmessagetext = messagetext;
 		    	var old_verbose_logging=verbose_logging;
+		    	var oldmessagetext = messagetext;
 		    	verbose_logging=false;
 		    	if (processInput(-1,true,true)) {
 			    	verbose_logging=old_verbose_logging;
@@ -2299,9 +2449,7 @@ function processInput(dir,dontCheckWin,dontModify) {
 					}
 			    }
 			    verbose_logging=old_verbose_logging;
-
 			    messagetext = oldmessagetext;
-			    verbose_logging=old_verbose_logging;
 		    }   
 		}
 		    
@@ -2425,16 +2573,28 @@ function anyMovements() {
 
 
 function nextLevel() {
-	keybuffer=[];
     againing=false;
 	messagetext="";
+	if (state && state.levels && (curlevel>state.levels.length) ){
+		curlevel=state.levels.length-1;
+	}
+	
 	if (titleScreen) {
 		if (titleSelection===0) {
 			//new game
 			curlevel=0;
+			curlevelTarget=null;
 		} 			
-		loadLevelFromState(state,curlevel);
-	} else {
+		if (curlevelTarget!==null){			
+			loadLevelFromStateTarget(state,curlevel,curlevelTarget);
+		} else {
+			loadLevelFromState(state,curlevel);
+		}
+	} else {	
+		if (hasUsedCheckpoint){
+			curlevelTarget=null;
+			hasUsedCheckpoint=false;
+		}
 		if (curlevel<(state.levels.length-1))
 		{			
 			curlevel++;
@@ -2442,9 +2602,23 @@ function nextLevel() {
 			titleScreen=false;
 			quittingMessageScreen=false;
 			messageselected=false;
-			loadLevelFromState(state,curlevel);
+
+			if (curlevelTarget!==null){			
+				loadLevelFromStateTarget(state,curlevel,curlevelTarget);
+			} else {
+				loadLevelFromState(state,curlevel);
+			}
 		} else {
+			if (!!window.localStorage) {
+				try{
+					localStorage.removeItem(document.URL);
+					localStorage.removeItem(document.URL+'_checkpoint');
+				} catch(ex){
+					
+				}
+			}
 			curlevel=0;
+			curlevelTarget=null;
 			goToTitleScreen();
 			tryPlayEndGameSound();
 		}		
@@ -2453,15 +2627,23 @@ function nextLevel() {
 	try {
 		if (!!window.localStorage) {
 			localStorage[document.URL]=curlevel;
+			if (curlevelTarget!==null){
+				restartTarget=level4Serialization();
+				var backupStr = JSON.stringify(restartTarget);
+				localStorage[document.URL+'_checkpoint']=backupStr;
+			} else {
+				localStorage.removeItem(document.URL+"_checkpoint");
+			}		
 		}
 	} catch (ex) {
 
 	}
 
-	canvasResize();	
-	if (canDump===true) {
-		inputHistory=[];
+	if (state!==undefined && state.metadata.flickscreen!==undefined){
+		oldflickscreendat=[0,0,Math.min(state.metadata.flickscreen[0],level.width),Math.min(state.metadata.flickscreen[1],level.height)];
 	}
+	canvasResize();	
+	clearInputHistory();
 }
 
 function goToTitleScreen(){
@@ -2469,7 +2651,8 @@ function goToTitleScreen(){
 	messagetext="";
 	titleScreen=true;
 	textMode=true;
-	titleSelection=curlevel>0?1:0;
+	doSetupTitleScreenLevelContinue();
+	titleSelection=(curlevel>0||curlevelTarget!==null)?1:0;
 	generateTitleScreen();
 }
 

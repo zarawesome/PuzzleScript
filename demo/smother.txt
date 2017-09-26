@@ -80,7 +80,6 @@ Heart
 
 PlayerFull
 #9CBD0F #8CAD0F #306230 #0F380F
-
 .222.
 .323.
 .222.
@@ -89,7 +88,6 @@ PlayerFull
 
 Protector
 #9CBD0F #8CAD0F #306230 #0F380F
-
 .333.
 .232.
 .333.
@@ -98,7 +96,6 @@ Protector
 
 ProtectorSolo
 #9CBD0F #8CAD0F #306230 #0F380F
-
 .333.
 .232.
 .333.
@@ -107,7 +104,6 @@ ProtectorSolo
 
 victimSolo
 #9CBD0F #8CAD0F #306230 #0F380F
-
 .222.
 .323.
 .222.
@@ -427,5 +423,3 @@ message Concept/Design/Programming/Graphics - Steven McStravog
 message Design/Programming/Graphics - Darragh McLernon
 message Porting/Design/Programming - Rachel Gawley
 message Artwork - Ricky Woodside
-
-

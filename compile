@@ -113,7 +113,9 @@ rm play_temp*.html
 echo gzipping site
 cd ../bin
 ./gzipper
+rm README.md
 rm gzipper
+rm commit
 cd ../src
 end=`date +%s`
 runtime=$((end-start))

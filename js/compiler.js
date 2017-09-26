@@ -143,6 +143,9 @@ function generateExtraMembers(state) {
 			if (o.spritematrix.length===0) {
 				o.spritematrix = [[0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0], [0, 0, 0, 0, 0]];
 			} else {
+				if ( o.spritematrix.length!==5 || o.spritematrix[0].length!==5 || o.spritematrix[1].length!==5 || o.spritematrix[2].length!==5 || o.spritematrix[3].length!==5 || o.spritematrix[4].length!==5 ){
+					logWarning("Sprite graphics must be 5 wide and 5 high exactly.",o.lineNumber);
+				}
 				o.spritematrix = generateSpriteMatrix(o.spritematrix);
 			}
 		}
@@ -201,12 +204,16 @@ function generateExtraMembers(state) {
                     } else {
                     	if (o.layer===undefined) {
                     		logError('Object "' + n.toUpperCase() + '" has been defined, but not assigned to a layer.',dat.lineNumber);
-                    	} else {                    		
-	                        logError(
-	                            'Trying to create an aggregate object (defined in the legend) with both "'
-	                            + n.toUpperCase() + '" and "' + state.idDict[mask[o.layer]].toUpperCase() + '", which are on the same layer and therefore can\'t coexist.',
-	                            dat.lineNumber
-	                            );
+                    	} else {
+                    		var n1 = n.toUpperCase();
+                    		var n2 = state.idDict[mask[o.layer]].toUpperCase();
+                    		if (n1!==n2){
+		                        logError(
+		                            'Trying to create an aggregate object (defined in the legend) with both "'
+		                            + n1 + '" and "' + n2 + '", which are on the same layer and therefore can\'t coexist.',
+		                            dat.lineNumber
+		                            );
+		                    }
 	                    }
                     }
                 }
@@ -358,12 +365,12 @@ function generateExtraMembers(state) {
 			backgroundid = o.id;
 			backgroundlayer = o.layer;
 		}else if ('background' in state.aggregatesDict) {
-			var o=state.idDict[0];
+			var o=state.objects[state.idDict[0]];
 			backgroundid=o.id;
 			backgroundlayer=o.layer;
 			logError("background cannot be an aggregate (declared with 'and'), it has to be a simple type, or property (declared in terms of others using 'or').");
 		} else {
-			var o=state.idDict[0];
+			var o=state.objects[state.idDict[0]];
 			backgroundid=o.id;
 			backgroundlayer=o.layer;
 			logError("you have to define something to be the background");
@@ -453,9 +460,15 @@ function levelsToArray(state) {
 			continue;
 		}
 		if (level[0] == '\n') {
+
 			var o = {
 				message: level[1]
 			};
+			splitMessage = wordwrap(o.message,intro_template[0].length);
+			if (splitMessage.length>12){
+				logWarning('Message too long to fit on screen.', level[2]);
+			}
+
 			processedLevels.push(o);
 		} else {
 			var o = levelFromString(state,level);
@@ -517,6 +530,16 @@ function directionalRule(rule) {
 	return false;
 }
 
+function findIndexAfterToken(str,tokens,tokenIndex){
+	str=str.toLowerCase();
+	var curIndex=0;
+	for (var i=0;i<=tokenIndex;i++){
+		var token = tokens[i];
+		curIndex=str.indexOf(token,curIndex)+token.length;
+	}
+	return curIndex;
+}
+
 function processRuleString(rule, state, curRules) 
 {
 /*
@@ -538,6 +561,10 @@ function processRuleString(rule, state, curRules)
 
 // STEP ONE, TOKENIZE
 	line = line.replace(/\[/g, ' [ ').replace(/\]/g, ' ] ').replace(/\|/g, ' | ').replace(/\-\>/g, ' -> ');
+	line=line.trim();
+	if (line[0]==='+'){
+		line = line.substring(0,1)+" "+line.substring(1,line.length);
+	}
 	var tokens = line.split(/\s/).filter(function(v) {return v !== ''});
 
 	if (tokens.length == 0) {
@@ -558,6 +585,8 @@ function processRuleString(rule, state, curRules)
 
 	var curcell = null; // [up, cat, down mouse]
 	var curcellrow = []; // [  [up, cat]  [ down, mouse ] ]
+
+	var incellrow = false;
 
 	var appendGroup=false;
 	var rhs = false;
@@ -603,7 +632,7 @@ function processRuleString(rule, state, curRules)
 						}						
 						groupNumber = curRules[curRules.length-1].groupNumber;
 					} else {
-						logError('Two "+"s ("append to previous rule group" symbol)applied to the same rule.',lineNumber);
+						logError('Two "+"s ("append to previous rule group" symbol) applied to the same rule.',lineNumber);
 					}
 				} else if (token in directionaggregates) {
 					directions = directions.concat(directionaggregates[token]);						
@@ -633,11 +662,14 @@ function processRuleString(rule, state, curRules)
 					if (curcellrow.length > 0) {
 						logError('Error, malformed cell rule - encountered a "["" before previous bracket was closed', lineNumber);
 					}
+					incellrow = true;
 					curcell = [];
 				} else if (reg_directions_only.exec(token)) {
 					if (curcell.length % 2 == 1) {
-						logError("Error, an item can't move in multiple directions.", lineNumber);
-					} else {
+						logError("Error, an item can only have one direction/action at a time, but you're looking for several at once!", lineNumber);
+					} else if (!incellrow) {
+						logWarning("Invalid syntax. Directions should be placed at the start of a rule.", lineNumber);
+  					} else {
 						curcell.push(token);
 					}
 				} else if (token == '|') {
@@ -665,6 +697,7 @@ function processRuleString(rule, state, curRules)
 						lhs_cells.push(curcellrow);
 					}
 					curcellrow = [];
+					incellrow = false;
 				} else if (token === '->') {
 					if (rhs) {
 						logError('Error, you can only use "->" once in a rule; it\'s used to separate before and after states.', lineNumber);
@@ -674,27 +707,35 @@ function processRuleString(rule, state, curRules)
 						rhs = true;
 					}
 				} else if (state.names.indexOf(token) >= 0) {
-					if (curcell.length % 2 == 0) {
+					if (!incellrow) {
+ 						logWarning("Invalid token "+token.toUpperCase() +". Object names should only be used within cells (square brackets).", lineNumber);
+ 					}
+ 					else if (curcell.length % 2 == 0) {
 						curcell.push('');
 						curcell.push(token);
 					} else if (curcell.length % 2 == 1) {
 						curcell.push(token);
 					}
 				} else if (token==='...') {
-					curcell.push(token);
-					curcell.push(token);
+					if (!incellrow) {
+ 						logWarning("Invalid syntax, ellipses should only be used within cells (square brackets).", lineNumber);
+ 					} else {
+ 						curcell.push(token);
+ 						curcell.push(token);
+ 					}
 				} else if (commandwords.indexOf(token)>=0) {
 					if (rhs===false) {
 						logError("Commands cannot appear on the left-hand side of the arrow.",lineNumber);
 					}
 					if (token==='message') {
-						var message_match = origLine.match(/message (.*)/i);
-						if (message_match === null) {
-							logError("invalid message string", lineNumber);
-						} else {
-							commands.push([token, message_match[1].trim()]);
-							i=tokens.length;
+						var messageIndex = findIndexAfterToken(origLine,tokens,i);
+						var messageStr = origLine.substring(messageIndex).trim();
+						if (messageStr===""){
+							messageStr=" ";
+							//needs to be nonempty or the system gets confused and thinks it's a whole level message rather than an interstitial.
 						}
+						commands.push([token, messageStr]);
+						i=tokens.length;
 					} else {
 						commands.push([token]);
 					}
@@ -718,7 +759,7 @@ function processRuleString(rule, state, curRules)
 				logError('In a rule, each pattern to match on the left must have a corresponding pattern on the right of equal length (number of cells).', lineNumber);
 			}
 			if (lhs_cells[i].length == 0) {
-				logError("You have an totally empty pattern on the left-hand side.  This will match *everything*.  You certianly don't want this.");
+				logError("You have an totally empty pattern on the left-hand side.  This will match *everything*.  You certainly don't want this.");
 			}
 		}
 	}
@@ -1103,7 +1144,7 @@ function concretizePropertyRule(state, rule,lineNumber) {
 
 
 	if (rhsPropertyRemains.length > 0) {
-		logError('This rule has a property on the right-hand side, \"'+ rhsPropertyRemains + "\", that can't be inferred from the left-hand side.  (either for every property on the right there has to be a corresponding one on the left in the same cell, OR, if there's a single occurrence of a particular property name on the left, all properties of the same name on the right are assumed to be the same).",lineNumber);
+		logError('This rule has a property on the right-hand side, \"'+ rhsPropertyRemains.toUpperCase() + "\", that can't be inferred from the left-hand side.  (either for every property on the right there has to be a corresponding one on the left in the same cell, OR, if there's a single occurrence of a particular property name on the left, all properties of the same name on the right are assumed to be the same).",lineNumber);
 	}
 
 	return result;
@@ -1142,7 +1183,7 @@ function concretizeMovingRule(state, rule,lineNumber) {
 							for(var moveTerm in cur_rule.movingReplacement) {
 								if (cur_rule.movingReplacement.hasOwnProperty(moveTerm)) {
 									var moveDat = cur_rule.movingReplacement[moveTerm];
-									newrule.movingReplacement[moveTerm] = [moveDat[0],moveDat[1],moveDat[3]];
+									newrule.movingReplacement[moveTerm] = [moveDat[0],moveDat[1],moveDat[2]];
 								}
 							}
 
@@ -1418,6 +1459,10 @@ function rulesToMask(state) {
 						var layerIndex = state.propertiesSingleLayer[object_name];
 					}
 
+					if (typeof(layerIndex)==="undefined"){
+						logError("Oops!  " +object_name.toUpperCase()+" not assigned to a layer.",rule.lineNumber);
+					}
+
 					if (object_dir==='no') {
 						objectsMissing.ior(objectMask);
 					} else {
@@ -1472,6 +1517,7 @@ function rulesToMask(state) {
 
 				var cell_r = cellrow_r[k];
 				var layersUsed_r = layerTemplate.concat([]);
+				var layersUsedRand_r = layerTemplate.concat([]);
 
 				var objectsClear = new BitVec(STRIDE_OBJ);
 				var objectsSet = new BitVec(STRIDE_OBJ);
@@ -1487,12 +1533,33 @@ function rulesToMask(state) {
 					var object_name = cell_r[l + 1];
 
 					if (object_dir==='...') {
-						logError("spooky ellipsis found! (should never hit this)");
+						//logError("spooky ellipsis found! (should never hit this)");
 						break;
 					} else if (object_dir==='random') {
 						if (object_name in state.objectMasks) {
-							var mask = state.objectMasks[object_name];    
-							randomMask_r.ior(mask);                      
+							var mask = state.objectMasks[object_name];
+ 							randomMask_r.ior(mask);
+ 							var values;
+ 							if (state.propertiesDict.hasOwnProperty(object_name)) {
+ 								values = state.propertiesDict[object_name];
+ 							} else {
+ 								values = [object_name];
+ 							}
+ 							for (var m = 0; m < values.length; m++) {
+ 								var subobject = values[m];
+ 								var layerIndex = state.objects[subobject].layer|0;
+ 								var existingname = layersUsed_r[layerIndex];
+ 								if (existingname !== null) {
+ 									var o1 = subobject.toUpperCase();
+ 									var o2 = existingname.toUpperCase();
+ 									if (o1!==o2) {
+ 										logWarning("This rule may try to spawn a "+o1+" with random, but also requires a "+o2+" be here, which is on the same layer - they shouldn't be able to coexist!", rule.lineNumber); 									
+ 									}
+ 								}
+ 
+ 								layersUsedRand_r[layerIndex] = subobject;
+ 							}                      
+
 						} else {
 							logError('You want to spawn a random "'+object_name.toUpperCase()+'", but I don\'t know how to do that',rule.lineNumber);
 						}
@@ -1512,6 +1579,10 @@ function rulesToMask(state) {
 						objectsClear.ior(objectMask);
 					} else {
 						var existingname = layersUsed_r[layerIndex];
+						if (existingname === null) {
+ 							existingname = layersUsedRand_r[layerIndex];
+ 						}
+
 						if (existingname !== null) {
 							logError('Rule matches object types that can\'t overlap: "' + object_name.toUpperCase() + '" and "' + existingname.toUpperCase() + '".', rule.lineNumber);
 						}
@@ -1552,7 +1623,7 @@ function rulesToMask(state) {
 					if (layersUsed_l[l] !== null && layersUsed_r[l] === null) {
 						// a layer matched on the lhs, but not on the rhs
 						objectsClear.ior(state.layerMasks[l]);
-						postMovementsLayerMask_r.ishiftor(0x1f, 5*layerIndex);
+						postMovementsLayerMask_r.ishiftor(0x1f, 5*l);
 					}
 				}
 
@@ -1780,7 +1851,6 @@ function getMaskFromName(state,name) {
 }
 
 function generateMasks(state) {
-
 	state.playerMask=getMaskFromName(state,'player');
 
 	var layerMasks=[];
@@ -1807,19 +1877,28 @@ function generateMasks(state) {
 		}
 	}
 
-	for (var i=0;i<state.legend_synonyms.length;i++) {
-		var syn = state.legend_synonyms[i];		
-		objectMask[syn[0]]=objectMask[syn[1]];
-	}
+	// Synonyms can depend on properties, and properties can depend on synonyms.
+	// Process them in order by combining & sorting by linenumber.
 
-	for (var i=0;i<state.legend_properties.length;i++) {
-		var prop = state.legend_properties[i];
-		var val = new BitVec(STRIDE_OBJ);
-		for (var j=1;j<prop.length;j++) {
-			var n = prop[j];
-			val.ior(objectMask[n]);
+	var synonyms_and_properties = state.legend_synonyms.concat(state.legend_properties);
+	synonyms_and_properties.sort(function(a, b) {
+		return a.lineNumber - b.lineNumber;
+	});
+
+	for (var i=0;i<synonyms_and_properties.length;i++) {
+		var synprop = synonyms_and_properties[i];
+		if (synprop.length == 2) {
+			// synonym (a = b)
+			objectMask[synprop[0]]=objectMask[synprop[1]];
+		} else {
+			// property (a = b or c)
+			var val = new BitVec(STRIDE_OBJ);
+			for (var j=1;j<synprop.length;j++) {
+				var n = synprop[j];
+				val.ior(objectMask[n]);
+			}
+			objectMask[synprop[0]]=val;
 		}
-		objectMask[prop[0]]=val;
 	}
 
 	state.objectMasks = objectMask;
@@ -1937,7 +2016,7 @@ function printCellRow(cellRow) {
 }
 
 function printRule(rule) {
-	var result="(<a onclick=\"jumpToLine('"+ rule.lineNumber.toString() + "');\"  href=\"javascript:void(0);\">"+rule.groupNumber+"</a>) "+ rule.direction.toString().toUpperCase()+" ";
+	var result="(<a onclick=\"jumpToLine('"+ rule.lineNumber.toString() + "');\"  href=\"javascript:void(0);\">"+rule.lineNumber+"</a>) "+ rule.direction.toString().toUpperCase()+" ";
 	if (rule.rigid) {
 		result = "RIGID "+result+" ";
 	}
@@ -2110,7 +2189,7 @@ function generateLoopPoints(state) {
 	state.lateLoopPoint=loopPoint;
 }
 
-var soundEvents = ["titlescreen", "startgame", "endgame", "startlevel","undo","restart","endlevel","showmessage","closemessage","sfx0","sfx1","sfx2","sfx3","sfx4","sfx5","sfx6","sfx7","sfx8","sfx9","sfx10"];
+var soundEvents = ["titlescreen", "startgame", "cancel", "endgame", "startlevel","undo","restart","endlevel","showmessage","closemessage","sfx0","sfx1","sfx2","sfx3","sfx4","sfx5","sfx6","sfx7","sfx8","sfx9","sfx10"];
 var soundMaskedEvents =["create","destroy","move","cantmove","action"];
 var soundVerbs = soundEvents.concat(soundMaskedEvents);
 
@@ -2148,12 +2227,20 @@ function generateSoundData(state) {
 		}
 		var lineNumber=sound[sound.length-1];
 
+		if (sound.length===2){			
+			logError('incorrect sound declaration.',lineNumber);
+			continue;
+		}
+
 		if (soundEvents.indexOf(sound[0])>=0) {
 			if (sound.length>4) {
-				logError("too much stuff to define a sound event",lineNumber);
+				logError("too much stuff to define a sound event.",lineNumber);
 			}
 			var seed = sound[1];
 			if (validSeed(seed)) {
+				if (sfx_Events[sound[0]]!==undefined){
+					logWarning(sound[0].toUpperCase()+" already declared.",lineNumber);				
+				} 
 				sfx_Events[sound[0]]=sound[1];
 			} else {
 				logError("Expecting sfx data, instead found \""+sound[1]+"\".",lineNumber);				
@@ -2177,7 +2264,7 @@ function generateSoundData(state) {
 			var seed = sound[sound.length-2];
 
 			if (target in state.aggregatesDict) {
-				logError('cannot assign sound fevents to aggregate objects (declared with "and"), only to regular objects, or properties, things defined in terms of "or" ("'+target+'").',lineNumber);
+				logError('cannot assign sound events to aggregate objects (declared with "and"), only to regular objects, or properties, things defined in terms of "or" ("'+target+'").',lineNumber);
 			}
 			else if (target in state.objectMasks) {
 
@@ -2469,9 +2556,7 @@ function compile(command,text,randomseed) {
 	}
 	setGameState(state,command,randomseed);
 
-	if (canDump===true) {
-		inputHistory=[];
-	}
+	clearInputHistory();
 
 	consoleCacheDump();
 }

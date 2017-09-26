@@ -15,14 +15,6 @@ LIGHTGREEN GREEN
 10111
 
 
-Target
-DarkBlue
-.....
-.000.
-.0.0.
-.000.
-.....
-
 Wall
 BROWN DARKBROWN
 00010
@@ -39,69 +31,69 @@ Black Orange White Blue
 .333.
 .3.3.
 
-BlueCrate B
-lightblue
-00000
-0...0
-0...0
-0...0
-00000
+LeftPerson
+Orange Yellow
+...0.
+..0..
+.0...
+..0..
+...0.
 
 
-OrangeCrate O
-Orange
-00000
-0...0
-0...0
-0...0
-00000
-
+RightPerson
+Orange Yellow
+.0...
+..0..
+...0.
+..0..
+.0...
 
 =======
 LEGEND
 =======
 
-Crate = OrangeCrate or BlueCrate
 . = Background
 # = Wall
 P = Player
-
+< = LeftPerson
+> = RightPerson
 
 =======
 SOUNDS
 =======
-
-Crate MOVE 36772507
 
 ================
 COLLISIONLAYERS
 ================
 
 Background
-Target
-Player, Wall, Crate
+Player, Wall, LeftPerson, RightPerson
 
 ======
 RULES
 ======
 
-[ >  Player | Crate ] -> [  >  Player | > Crate  ]
+[ stationary LeftPerson ] -> [ left LeftPerson ]
+[ stationary RightPerson ] -> [ right RightPerson ]
 
-[ > Crate | Crate ] -> [ > Crate | > Crate ]
+right [ wall |< LeftPerson ] -> [ wall | > RightPerson ]
+right [ > RightPerson | Wall ] -> [ < LeftPerson | Wall ]
 
 ==============
 WINCONDITIONS
 ==============
 
+
 =======
 LEVELS
 =======
 
-#########
-#.......#
-#...B...#
-#.P.B.O.#
-#....O..#
-#.......#
-#########
+
+####..
+#.>#..
+#..###
+#<P..#
+#..>.#
+#..###
+####..
 

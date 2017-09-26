@@ -4,10 +4,21 @@
 
 window.Mobile = {};
 
+//stolen from https://github.com/Modernizr/Modernizr/blob/master/feature-detects/touchevents.js
 Mobile.hasTouch = function() {
-    return document.documentElement &&
-        document.documentElement.hasOwnProperty('ontouchstart');
-};
+    var bool;
+    if(('ontouchstart' in window) || window.DocumentTouch && document instanceof DocumentTouch)     {
+      bool = true;
+    } else {
+      /*
+      //don't know what's happening with this, so commented it out
+      var query = ['@media (',prefixes.join('touch-enabled),    ('),'heartz',')','{#modernizr{top:9px;position:absolute}}'].join('');
+      testStyles(query, function( node ) {
+        bool = node.offsetTop === 9;
+      });*/
+    }
+    return bool;
+}
 
 Mobile.enable = function (force) {
     if (force || Mobile.hasTouch() && !Mobile._instance) {
@@ -653,7 +664,7 @@ Mobile.debugDot = function (event) {
     proto.isAudioSupported = function () {
         var isAudioSupported = true;
 
-        if (webkitAudioContext) {
+        if (typeof webkitAudioContext !== 'undefined') {
             // We may be on Mobile Safari, which throws up
             // 'Operation not Supported' alerts when we attempt to
             // play Audio elements with "data:audio/wav;base64"

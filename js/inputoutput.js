@@ -150,11 +150,14 @@ function matchGlyph(inputmask,glyphAndMask) {
 	var highestmask;
 	for (var i=0; i<glyphAndMask.length; ++i) {
 		var glyphname = glyphAndMask[i][0];
-		var glyphmask = glyphAndMask[i][1]
+		var glyphmask = glyphAndMask[i][1];
+ 		var glyphbits = glyphAndMask[i][2];
 		//require all bits of glyph to be in input
 		if (glyphmask.bitsSetInArray(inputmask.data)) {
 			var bitcount = 0;
 			for (var bit=0;bit<32*STRIDE_OBJ;++bit) {
+				if (glyphbits.get(bit) && inputmask.get(bit))
+ 					bitcount++;
 				if (glyphmask.get(bit) && inputmask.get(bit))
 					bitcount++;
 			}
@@ -184,7 +187,7 @@ var htmlEntityMap = {
 var selectableint  = 0;
 
 function printLevel() {
-	var glyphAndMask = [];
+	var glyphMasks = [];
 	for (var glyphName in state.glyphDict) {
 		if (state.glyphDict.hasOwnProperty(glyphName)&&glyphName.length===1) {
 			var glyph = state.glyphDict[glyphName];
@@ -196,19 +199,11 @@ function printLevel() {
 					glyphmask.ibitset(id);
 				}
 			}
-			glyphAndMask.push([glyphName, glyphmask.clone()])
+			var glyphbits = glyphmask.clone();
 			//register the same - backgroundmask with the same name
 			var bgMask = state.layerMasks[state.backgroundlayer];
 			glyphmask.iclear(bgMask);
-			glyphAndMask.push([glyphName, glyphmask.clone()])
-			for (var i=0;i<32;i++) {
-				var bgid = 1<<i;
-				if (bgMask.get(i)) {
-					glyphmask.ibitset(i);
-					glyphAndMask.push([glyphName, glyphmask.clone()]);
-					glyphmask.ibitclear(i);
-				}
-			}
+			glyphMasks.push([glyphName, glyphmask, glyphbits]);
 		}
 	}
 	selectableint++;
@@ -219,7 +214,7 @@ function printLevel() {
 		for (var i=0;i<level.width;i++) {
 			var cellIndex = j+i*level.height;
 			var cellMask = level.getCell(cellIndex);
-			var glyph = matchGlyph(cellMask,glyphAndMask);
+			var glyph = matchGlyph(cellMask,glyphMasks);
 			if (glyph in htmlEntityMap) {
 				glyph = htmlEntityMap[glyph]; 
 			}
@@ -229,7 +224,7 @@ function printLevel() {
 			output=output+"<br>";
 		}
 	}
-	output+="</span><br>"
+	output+="</span><br><br>"
 	consolePrint(output,true);
 }
 
@@ -257,7 +252,7 @@ function levelEditorClick(event,click) {
 		}
 
 		var backgroundMask = state.layerMasks[state.backgroundlayer];
-		if (glyphmask.bitsClearInArray(backgroundMask)) {
+		if (glyphmask.bitsClearInArray(backgroundMask.data)) {
 			// If we don't already have a background layer, mix in
 			// the default one.
 			glyphmask.ibitset(state.backgroundid);
@@ -379,7 +374,7 @@ function onKeyDown(event) {
     	return;
     }
 
-    if(lastDownTarget === canvas) {
+    if(lastDownTarget === canvas || (window.Mobile && (lastDownTarget === window.Mobile.focusIndicator) ) ){
     	if (keybuffer.indexOf(event.keyCode)===-1) {
     		keybuffer.splice(keyRepeatIndex,0,event.keyCode);
 	    	keyRepeatTimer=0;
@@ -540,11 +535,8 @@ function checkKey(e,justPressed) {
         {
             //undo
             if (textMode===false) {
-
-                if (canDump===true) {
-                    inputHistory.push("undo");
-                }
-            	DoUndo();
+                pushInput("undo");
+                DoUndo(false,true);
                 canvasResize(); // calls redraw
             	return prevent(e);
             }
@@ -554,9 +546,7 @@ function checkKey(e,justPressed) {
         {
         	if (textMode===false) {
         		if (justPressed) {
-	                if (canDump===true) {
-	                    inputHistory.push("restart");
-	                }
+	        		pushInput("restart");
 	        		DoRestart();
 	                canvasResize(); // calls redraw
             		return prevent(e);
@@ -578,6 +568,9 @@ function checkKey(e,justPressed) {
         	if (canOpenEditor) {
         		if (justPressed) {
         			levelEditorOpened=!levelEditorOpened;
+        			if (levelEditorOpened===false){
+        				printLevel();
+        			}
         			restartTarget=backupLevel();
         			canvasResize();
         		}
@@ -651,7 +644,11 @@ function checkKey(e,justPressed) {
 	    			}
     			}
     			else if (inputdir===0||inputdir===2) {
-    				titleSelection=1-titleSelection;
+    				if (inputdir===0){
+    					titleSelection=0;    					
+    				} else {
+    					titleSelection=1;    					    					
+    				}
     				generateTitleScreen();
     				redraw();
     			}
@@ -673,12 +670,10 @@ function checkKey(e,justPressed) {
     	}
     } else {
 	    if (!againing && inputdir>=0) {
-            if (canDump===true) {
-                inputHistory.push(inputdir);
-            }
             if (inputdir===4 && ('noaction' in state.metadata)) {
 
             } else {
+                pushInput(inputdir);
                 if (processInput(inputdir)) {
                     redraw();
                 }
@@ -699,7 +694,7 @@ function update() {
         }
     }
     if (againing) {
-        if (timer>againinterval) {
+        if (timer>againinterval&&messagetext.length==0) {
             if (processInput(-1)) {
                 redraw();
                 keyRepeatTimer=0;
@@ -716,7 +711,7 @@ function update() {
             	messagetext="";
             	textMode=false;
 				titleScreen=false;
-				titleMode=curlevel>0?1:0;
+				titleMode=(curlevel>0||curlevelTarget!==null)?1:0;
 				titleSelected=false;
 				titleSelection=0;
     			canvasResize();  
@@ -741,13 +736,11 @@ function update() {
 	    }
 	}
 
-    if (autotickinterval>0&&!textMode&&!levelEditorOpened&&!againing) {
+    if (autotickinterval>0&&!textMode&&!levelEditorOpened&&!againing&&!winning) {
         autotick+=deltatime;
         if (autotick>autotickinterval) {
             autotick=0;
-            if (canDump===true) {
-            	inputHistory.push("tick");            
-            }
+            pushInput("tick");
             if (processInput(-1)) {
                 redraw();
             }
