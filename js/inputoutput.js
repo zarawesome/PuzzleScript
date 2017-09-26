@@ -257,6 +257,8 @@ function gameClick(event,click)
 		var posX = (mouseCoordX + screenOffsetX);
 		var posY = (mouseCoordY + screenOffsetY);
 
+		if (posX < 0 || posY < 0 || posX >= level.width || posY >= level.height) return;
+
 		if (verbose_logging)
 		{
 			consolePrint("Mouse action at coordinates " + posX + "," + posY);
