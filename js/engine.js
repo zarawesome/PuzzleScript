@@ -200,7 +200,13 @@ function generateTitleScreen()
 	} else if (noRestart) {
 		titleImage[11]=".Z to undo.....................";
 	}
-	if (noAction) {
+	if ('mouse_action' in state.metadata)
+	{
+		messagecontainer_template[10]="........press to continue.........",
+		titleImage[ 9]=".mouse or touch to play...........";
+		titleImage[10]="..................................";
+	}
+	else if (noAction) {
 		titleImage[10]=".X to select......................";
 	}
 	for (var i=0;i<titleImage.length;i++)
@@ -2319,8 +2325,18 @@ function processInput(dir,dontCheckWin,dontModify) {
         	//play player cantmove sounds here
         }
 
-	    if (level.commandQueue.indexOf('cancel')>=0) {	
-	    	if (verbose_logging) { 
+	    if (level.commandQueue.indexOf('undo')>=0) {
+	    	if (verbose_logging) {
+	    		consoleCacheDump();
+	    		consolePrint('UNDO command executed, undoing turn.',true);
+			}
+			messagetext = "";
+    		DoUndo(true,false);
+    		return true;
+		}
+
+	    if (level.commandQueue.indexOf('cancel')>=0) {
+	    	if (verbose_logging) {
 	    		consoleCacheDump();
 	    		consolePrint('CANCEL command executed, cancelling turn.',true);
 			}

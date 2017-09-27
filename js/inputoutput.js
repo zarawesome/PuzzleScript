@@ -244,25 +244,27 @@ function gameClick(event,click)
 				titleSelection = 0;
 				checkKey({keyCode: 88},true);
 			}
-			return;
+			return true;
 		}
 		else if (textMode)
 		{
 			checkKey({keyCode: 88},true);
-			return;
+			return true;
 		}
 
-		if (againing) return;
+		if (againing) return false;
 
 		var posX = (mouseCoordX + screenOffsetX);
 		var posY = (mouseCoordY + screenOffsetY);
 
-		if (posX < 0 || posY < 0 || posX >= level.width || posY >= level.height) return;
+		if (posX < 0 || posY < 0 || posX >= level.width || posY >= level.height) return false;
 
 		if (verbose_logging)
 		{
 			consolePrint("Mouse action at coordinates " + posX + "," + posY);
 		}
+
+		backups.push(backupLevel());
 
 		var index = posY + posX * level.height;
 	    moveEntitiesAtIndex(index,level.getCell(index),16);
@@ -273,7 +275,9 @@ function gameClick(event,click)
 				redraw();
 			}
 		}
+		return true;
 	}
+	return false;
 }
 
 function levelEditorClick(event,click) {
@@ -403,6 +407,12 @@ function onMouseDown(event) {
 
 }
 
+function onTouch(event, x, y)
+{
+	setMouseCoordXY(coords.x, coords.y);
+	return gameClick(event, false);
+}
+
 function rightClickCanvas(event) {
     return prevent(event);
 }
@@ -492,21 +502,27 @@ function onMyBlur(event) {
 var mouseCoordX=0;
 var mouseCoordY=0;
 
-function setMouseCoord(e){
+function setMouseCoord(e)
+{
     var coords = canvas.relMouseCoords(e);
-    mouseCoordX=coords.x-xoffset;
-	mouseCoordY=coords.y-yoffset;
+	setMouseCoordXY(coords.x, coords.y);
+}
+
+function setmouseCoordXY(x, y)
+{
+    mouseCoordX=x-xoffset;
+	mouseCoordY=y-yoffset;
 	mouseCoordX=Math.floor(mouseCoordX/cellwidth);
 	mouseCoordY=Math.floor(mouseCoordY/cellheight);
 }
 
 function mouseMove(event) {
     if (levelEditorOpened) {
-    	setMouseCoord(event);  
-    	if (dragging) { 	
+    	setMouseCoord(event);
+    	if (dragging) {
     		levelEditorClick(event,false);
     	} else if (rightdragging){
-    		levelEditorRightClick(event,false);    		
+    		levelEditorRightClick(event,false);
     	}
 	    redraw();
     }

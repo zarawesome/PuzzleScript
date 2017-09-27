@@ -148,6 +148,8 @@ Mobile.debugDot = function (event) {
 
         this.firstPos.x = event.touches[0].clientX;
         this.firstPos.y = event.touches[0].clientY;
+
+        onTouch(event, this.firstPos.x, this.firstPos.y);
     };
 
     proto.onTouchEnd = function (event) {
