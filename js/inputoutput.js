@@ -508,7 +508,7 @@ function setMouseCoord(e)
 	setMouseCoordXY(coords.x, coords.y);
 }
 
-function setmouseCoordXY(x, y)
+function setMouseCoordXY(x, y)
 {
     mouseCoordX=x-xoffset;
 	mouseCoordY=y-yoffset;

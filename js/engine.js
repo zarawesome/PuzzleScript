@@ -2332,6 +2332,7 @@ function processInput(dir,dontCheckWin,dontModify) {
 			}
 			messagetext = "";
     		DoUndo(true,false);
+    		DoUndo(true,false);
     		return true;
 		}
 
